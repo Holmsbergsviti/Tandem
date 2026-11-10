@@ -751,8 +751,10 @@ void ADriftVehiclePawn::ApplyCarSpec(int32 Model)
 	EnginePitchScale = 1.f;
 	if (EngineLowAudio && EngineHighAudio && GetWorld() && GetWorld()->IsGameWorld())
 	{
-		USoundBase* Low = CarModel == 1 ? LoadObject<USoundBase>(nullptr, EngineLowV6SoundPath) : nullptr;
-		USoundBase* High = CarModel == 1 ? LoadObject<USoundBase>(nullptr, EngineHighV6SoundPath) : nullptr;
+		// bUseV6Loops is off: Boss found the synthesised V6 loops horrible (10 Nov), so the NSX is back on
+		// the four-cylinder loops pitched up until there is a real recording.
+		USoundBase* Low = (CarModel == 1 && bUseV6Loops) ? LoadObject<USoundBase>(nullptr, EngineLowV6SoundPath) : nullptr;
+		USoundBase* High = (CarModel == 1 && bUseV6Loops) ? LoadObject<USoundBase>(nullptr, EngineHighV6SoundPath) : nullptr;
 		if (CarModel == 1 && (!Low || !High)) EnginePitchScale = 1.3f;
 		if (!Low || !High)
 		{

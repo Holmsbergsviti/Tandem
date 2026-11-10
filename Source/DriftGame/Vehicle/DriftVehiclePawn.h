@@ -311,6 +311,8 @@ public:
 	bool IsEngineBlown() const { return bEngineBlown; }
 	float GetEngineHealth() const { return FMath::Clamp(1.f - EngineDamage / FMath::Max(EngineStrength, 1.f), 0.f, 1.f); }
 
+	/** Use the synthesised V6 loops for the NSX (off: they sounded bad; see ApplyCarSpec). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Sound") bool bUseV6Loops = false;
 	/** Writes the drive recorder files (see RecPath). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drift") bool bRecordDrives = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Car") FLinearColor PaintColor = FLinearColor(0.82f, 0.82f, 0.8f); // white over black two-tone
