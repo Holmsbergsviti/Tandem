@@ -117,4 +117,35 @@ namespace DriftGraphics
 		static const TCHAR* Names[4] = { TEXT("LOW"), TEXT("MEDIUM"), TEXT("HIGH"), TEXT("EPIC") };
 		return Names[FMath::Clamp(Level, 0, 3)];
 	}
+
+	namespace SoundLocal
+	{
+		const TCHAR* Section = TEXT("Tandem.Sound");
+		const TCHAR* Keys[NumSounds] = { TEXT("Engine"), TEXT("Tyres"), TEXT("Wind"), TEXT("Crash") };
+		const TCHAR* Labels[NumSounds] = { TEXT("Engine sound"), TEXT("Tyre squeal"), TEXT("Wind noise"), TEXT("Crash and explosion") };
+		int8 Cached[NumSounds] = { -1, -1, -1, -1 }; // read once: the car asks every frame
+	}
+
+	const TCHAR* SoundLabel(int32 Which) { return SoundLocal::Labels[FMath::Clamp(Which, 0, NumSounds - 1)]; }
+
+	bool SoundOn(int32 Which)
+	{
+		if (Which < 0 || Which >= NumSounds) return true;
+		if (SoundLocal::Cached[Which] < 0)
+		{
+			int32 V = 1;
+			if (GConfig) GConfig->GetInt(SoundLocal::Section, SoundLocal::Keys[Which], V, GGameUserSettingsIni);
+			SoundLocal::Cached[Which] = V != 0 ? 1 : 0;
+		}
+		return SoundLocal::Cached[Which] != 0;
+	}
+
+	void SetSoundOn(int32 Which, bool bOn)
+	{
+		if (Which < 0 || Which >= NumSounds) return;
+		SoundLocal::Cached[Which] = bOn ? 1 : 0;
+		if (!GConfig) return;
+		GConfig->SetInt(SoundLocal::Section, SoundLocal::Keys[Which], bOn ? 1 : 0, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
 }

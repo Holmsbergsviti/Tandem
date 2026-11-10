@@ -277,3 +277,7 @@ Boss asked to see the recorder's drift statistics in the game. Esc > Stats shows
 all time: drifts, ended clean / snapped back / spun (%), longest and average length, biggest and average
 angle, time drifting, share on the rev limiter, most used gear. Counted live (`Vehicle/DriftStats.*`),
 all-time saved under `[Tandem.Stats]`. Information only: nothing is scored or rewarded.
+
+### Sound switches (10 Nov, night)
+Esc > Graphics and sound has on/off switches for engine sound, tyre squeal, wind noise, and crash and
+explosion sounds, saved under `[Tandem.Sound]` (all on by default).

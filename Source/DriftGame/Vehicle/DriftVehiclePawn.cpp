@@ -6,6 +6,7 @@
 #include "Input/DriftKeyBindings.h"
 #include "Vehicle/DriftTuning.h"
 #include "Vehicle/DriftStats.h"
+#include "UI/DriftGraphicsSettings.h"
 #include "Track/DriftTrackBuilder.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -1651,6 +1652,7 @@ void ADriftVehiclePawn::KnockOff(FDriftLoosePart& Part, const FVector& Push)
 	Part.Vel = Body->GetPhysicsLinearVelocityAtPoint(Pos) * 0.7f + Push + FVector(FMath::FRandRange(-60.f, 60.f), FMath::FRandRange(-60.f, 60.f), FMath::FRandRange(180.f, 320.f));
 	Part.SpinAxis = FMath::VRand();
 	Part.SpinDegPerSec = FMath::FRandRange(180.f, 420.f);
+	if (!DriftGraphics::SoundOn(DriftGraphics::Crash)) return;
 	if (USoundBase* Crunch = LoadObject<USoundBase>(nullptr, ExplosionSoundPath)) UGameplayStatics::PlaySound2D(this, Crunch, 0.3f, 2.2f);
 }
 
@@ -1678,7 +1680,10 @@ void ADriftVehiclePawn::BlowEngine()
 	FireBall->SetRelativeLocation(EngineLocalPos() + FVector(0.f, 0.f, 30.f));
 	FireBall->SetVisibility(true);
 	DriftSceneryUtil::Tint(this, FireBall, FLinearColor(6.f, 1.6f, 0.15f), 1.f);
-	if (USoundBase* Boom = LoadObject<USoundBase>(nullptr, ExplosionSoundPath)) UGameplayStatics::PlaySound2D(this, Boom, 1.f, 1.f);
+	if (DriftGraphics::SoundOn(DriftGraphics::Crash))
+	{
+		if (USoundBase* Boom = LoadObject<USoundBase>(nullptr, ExplosionSoundPath)) UGameplayStatics::PlaySound2D(this, Boom, 1.f, 1.f);
+	}
 	MapToastName = TEXT("ENGINE BLOWN      BACKSPACE or M: repaired car");
 	MapToastAge = 0.f;
 }
@@ -1826,7 +1831,7 @@ void ADriftVehiclePawn::UpdateAudio(float Dt)
 
 	// Engine: low loop below ~3000 rpm, high loop above, each pitched from the rpm it was made at.
 	const float Fade = FMath::Clamp((RPM - 2800.f) / 900.f, 0.f, 1.f);
-	const float Load = bEngineBlown ? 0.f : 0.5f + 0.5f * ThrottleSmooth;
+	const float Load = (bEngineBlown || !DriftGraphics::SoundOn(DriftGraphics::Engine)) ? 0.f : 0.5f + 0.5f * ThrottleSmooth;
 	EngineLowAudio->SetPitchMultiplier(FMath::Clamp(RPM / 1800.f * EnginePitchScale, 0.45f, 2.4f));
 	EngineHighAudio->SetPitchMultiplier(FMath::Clamp(RPM / 5000.f * EnginePitchScale, 0.5f, 2.4f));
 	EngineLowAudio->SetVolumeMultiplier(FMath::Max(0.001f, 0.7f * (1.f - Fade) * Load * Master));
@@ -1836,7 +1841,7 @@ void ADriftVehiclePawn::UpdateAudio(float Dt)
 	const float SpeedMS = Body->GetPhysicsLinearVelocity().Size() / 100.f;
 	const bool bInside = !CamModes[CameraIndex].bLag;
 	WindVol = FMath::FInterpTo(WindVol, FMath::Clamp(FMath::Square(SpeedMS / 40.f), 0.f, 1.2f) * (bInside ? 0.45f : 0.7f), Dt, 4.f);
-	WindAudio->SetVolumeMultiplier(FMath::Max(0.001f, WindVol * Master));
+	WindAudio->SetVolumeMultiplier(FMath::Max(0.001f, WindVol * Master * (DriftGraphics::SoundOn(DriftGraphics::Wind) ? 1.f : 0.f)));
 	WindAudio->SetPitchMultiplier(FMath::Clamp(0.75f + SpeedMS / 70.f, 0.75f, 1.8f));
 
 	// Tyres squeal as their contact patches scrub.
@@ -1844,7 +1849,7 @@ void ADriftVehiclePawn::UpdateAudio(float Dt)
 	for (const FDriftWheel& W : Wheels) if (W.bGrounded) Slide = FMath::Max(Slide, W.SlideSpeed);
 	const float Want = FMath::SmoothStep(1.5f, 6.f, Slide) * 0.65f;
 	TyreVol = FMath::FInterpTo(TyreVol, Want, Dt, Want > TyreVol ? 14.f : 6.f);
-	TyreAudio->SetVolumeMultiplier(FMath::Max(0.001f, TyreVol * Master));
+	TyreAudio->SetVolumeMultiplier(FMath::Max(0.001f, TyreVol * Master * (DriftGraphics::SoundOn(DriftGraphics::Tyres) ? 1.f : 0.f)));
 	TyreAudio->SetPitchMultiplier(0.92f + 0.12f * FMath::Clamp((Slide - 3.f) / 10.f, 0.f, 1.f));
 }
 

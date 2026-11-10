@@ -124,7 +124,7 @@ FString ADriftPlayerController::GetMenuTitle() const
 	case EDriftMenuPage::Car: return TEXT("CAR");
 	case EDriftMenuPage::Tuning: return TEXT("TUNING");
 	case EDriftMenuPage::Stats: return TEXT("STATS");
-	case EDriftMenuPage::Graphics: return TEXT("GRAPHICS");
+	case EDriftMenuPage::Graphics: return TEXT("GRAPHICS AND SOUND");
 	default: return TEXT("TANDEM");
 	}
 }
@@ -162,7 +162,7 @@ void ADriftPlayerController::GetMenuItems(TArray<FDriftMenuItem>& Out) const
 		Add(TEXT("Car"));
 		Add(TEXT("Tuning"));
 		Add(TEXT("Stats"));
-		Add(TEXT("Graphics"));
+		Add(TEXT("Graphics and sound"));
 		Add(TEXT("Quit game"));
 		break;
 	case EDriftMenuPage::Maps:
@@ -228,6 +228,7 @@ void ADriftPlayerController::GetMenuItems(TArray<FDriftMenuItem>& Out) const
 		Add(TEXT("Render resolution"), FString::Printf(TEXT("%d %%"), DriftGraphics::ResolutionPct()), true, true);
 		Add(TEXT("Frame limit"), DriftMenuLocal::FpsName(DriftGraphics::FpsLimit()), true, true);
 		Add(TEXT("Show FPS"), DriftGraphics::ShowFps() ? TEXT("ON") : TEXT("OFF"), true, true);
+		for (int32 i = 0; i < DriftGraphics::NumSounds; ++i) Add(DriftGraphics::SoundLabel(i), DriftGraphics::SoundOn(i) ? TEXT("ON") : TEXT("OFF"), true, true);
 		Add(TEXT("Back"));
 		break;
 	default:
@@ -324,6 +325,7 @@ void ADriftPlayerController::Activate(int32 Index, int32 Dir)
 			DriftGraphics::SetFpsLimit(FpsSteps[MenuWrap(Cur + Dir, N)]);
 		}
 		else if (Index == 3) DriftGraphics::SetShowFps(!DriftGraphics::ShowFps());
+		else if (Index - 4 < DriftGraphics::NumSounds) DriftGraphics::SetSoundOn(Index - 4, !DriftGraphics::SoundOn(Index - 4));
 		break;
 	}
 

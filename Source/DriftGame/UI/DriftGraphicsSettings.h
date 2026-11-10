@@ -26,4 +26,10 @@ namespace DriftGraphics
 	void ApplyAtStartup(UWorld* World);
 
 	FString QualityName(int32 Level);
+
+	// ---- Sound switches (same menu page), saved under [Tandem.Sound]. Default: everything on. ----
+	enum ESound : int32 { Engine = 0, Tyres, Wind, Crash, NumSounds };
+	const TCHAR* SoundLabel(int32 Which);
+	bool SoundOn(int32 Which);
+	void SetSoundOn(int32 Which, bool bOn);
 }
