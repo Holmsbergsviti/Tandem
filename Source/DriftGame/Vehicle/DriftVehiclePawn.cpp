@@ -5,6 +5,7 @@
 #include "Modes/DriftGameModeBase.h"
 #include "Input/DriftKeyBindings.h"
 #include "Vehicle/DriftTuning.h"
+#include "Vehicle/DriftStats.h"
 #include "Track/DriftTrackBuilder.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -1173,6 +1174,7 @@ void ADriftVehiclePawn::Tick(float DeltaSeconds)
 
 	UpdateCheckpoint(DeltaSeconds);
 	UpdateRecorder(Dt, ThrottleSmooth, Brake, SteerCurrent, bHandbrake);
+	DriftStats::Update(Dt, bOccupied && !bInputLocked, SpeedKmh, BodySlipDeg, RPM, MaxRPM, Gear);
 
 	SimulateWheels(Dt, ThrottleSmooth, Brake, bHandbrake);
 	ClutchKickTimer = FMath::Max(0.f, ClutchKickTimer - Dt);

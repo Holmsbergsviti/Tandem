@@ -271,3 +271,9 @@ Bumpers and spoiler became their own meshes for this (`DriftCarMesh::BuildLooseP
 First look at the recorder (NSX, 29 min, tuned to 490 Nm / 1000 kg / 9000 rpm): 123 drifts of 1 s or
 more, 42% ended cleanly, 41% snapped the other way, 16% spun; 96% in 2nd gear, on the rev limiter half
 of the time. Clean exits rose from 36% to 48% between the first and second half of the drive.
+
+### Stats page (10 Nov, night)
+Boss asked to see the recorder's drift statistics in the game. Esc > Stats shows, for this session and
+all time: drifts, ended clean / snapped back / spun (%), longest and average length, biggest and average
+angle, time drifting, share on the rev limiter, most used gear. Counted live (`Vehicle/DriftStats.*`),
+all-time saved under `[Tandem.Stats]`. Information only: nothing is scored or rewarded.

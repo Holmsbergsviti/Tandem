@@ -4,6 +4,7 @@
 #include "Modes/DriftGameModeBase.h"
 #include "Vehicle/DriftVehiclePawn.h"
 #include "Vehicle/DriftTuning.h"
+#include "Vehicle/DriftStats.h"
 #include "Character/DriftDriverCharacter.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -95,7 +96,8 @@ void ADriftPlayerController::Back()
 	case EDriftMenuPage::Controls: GoTo(EDriftMenuPage::Main, 2); break;
 	case EDriftMenuPage::Car: GoTo(EDriftMenuPage::Main, 3); break;
 	case EDriftMenuPage::Tuning: GoTo(EDriftMenuPage::Main, 4); break;
-	case EDriftMenuPage::Graphics: GoTo(EDriftMenuPage::Main, 5); break;
+	case EDriftMenuPage::Stats: GoTo(EDriftMenuPage::Main, 5); break;
+	case EDriftMenuPage::Graphics: GoTo(EDriftMenuPage::Main, 6); break;
 	default: CloseMenu(); break;
 	}
 }
@@ -121,6 +123,7 @@ FString ADriftPlayerController::GetMenuTitle() const
 	case EDriftMenuPage::Controls: return TEXT("CONTROLS");
 	case EDriftMenuPage::Car: return TEXT("CAR");
 	case EDriftMenuPage::Tuning: return TEXT("TUNING");
+	case EDriftMenuPage::Stats: return TEXT("STATS");
 	case EDriftMenuPage::Graphics: return TEXT("GRAPHICS");
 	default: return TEXT("TANDEM");
 	}
@@ -135,6 +138,7 @@ FString ADriftPlayerController::GetMenuNote() const
 			: TEXT("Choose a control, then press its new key. Taken keys swap. Gamepad buttons are fixed.");
 	case EDriftMenuPage::Car: return TEXT("Pick a car. Each one keeps its own tuning.");
 	case EDriftMenuPage::Tuning: return TEXT("For the car in use. Left / right (mouse: click / right-click) changes a value; saved at once.");
+	case EDriftMenuPage::Stats: return TEXT("This session  /  all time. A drift counts from 1 second at 15 degrees or more.");
 	case EDriftMenuPage::Graphics: return TEXT("Weak laptop? LOW quality and a lower render resolution help the most.");
 	case EDriftMenuPage::Maps: return TEXT("Puts you in the car at the start of the map.");
 	default: return TEXT("Paused");
@@ -157,6 +161,7 @@ void ADriftPlayerController::GetMenuItems(TArray<FDriftMenuItem>& Out) const
 		Add(TEXT("Controls"));
 		Add(TEXT("Car"));
 		Add(TEXT("Tuning"));
+		Add(TEXT("Stats"));
 		Add(TEXT("Graphics"));
 		Add(TEXT("Quit game"));
 		break;
@@ -213,6 +218,11 @@ void ADriftPlayerController::GetMenuItems(TArray<FDriftMenuItem>& Out) const
 		Add(TEXT("Back"));
 		break;
 	}
+	case EDriftMenuPage::Stats:
+		for (int32 i = 0; i < DriftStats::NumRows(); ++i) Add(DriftStats::RowLabel(i), DriftStats::RowValue(i));
+		Add(TEXT("Reset all-time stats"));
+		Add(TEXT("Back"));
+		break;
 	case EDriftMenuPage::Graphics:
 		Add(TEXT("Quality"), DriftGraphics::QualityName(DriftGraphics::Quality()), true, true);
 		Add(TEXT("Render resolution"), FString::Printf(TEXT("%d %%"), DriftGraphics::ResolutionPct()), true, true);
@@ -249,8 +259,9 @@ void ADriftPlayerController::Activate(int32 Index, int32 Dir)
 		case 2: GoTo(EDriftMenuPage::Controls); break;
 		case 3: GoTo(EDriftMenuPage::Car); break;
 		case 4: GoTo(EDriftMenuPage::Tuning); break;
-		case 5: GoTo(EDriftMenuPage::Graphics); break;
-		case 6: UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false); break;
+		case 5: GoTo(EDriftMenuPage::Stats); break;
+		case 6: GoTo(EDriftMenuPage::Graphics); break;
+		case 7: UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false); break;
 		default: break;
 		}
 		break;
@@ -290,6 +301,10 @@ void ADriftPlayerController::Activate(int32 Index, int32 Dir)
 			if (Index < DriftTuning::Num()) DriftTuning::Step(Index, Dir, Car);
 			else DriftTuning::ResetAll(Car);
 		}
+		break;
+
+	case EDriftMenuPage::Stats:
+		if (Index == DriftStats::NumRows()) DriftStats::ResetAllTime();
 		break;
 
 	case EDriftMenuPage::Graphics:

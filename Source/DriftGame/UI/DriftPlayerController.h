@@ -6,7 +6,7 @@
 
 class ADriftVehiclePawn;
 
-enum class EDriftMenuPage : uint8 { None, Main, Maps, Controls, Car, Tuning, Graphics };
+enum class EDriftMenuPage : uint8 { None, Main, Maps, Controls, Car, Tuning, Stats, Graphics };
 
 /** One line of the menu, as the HUD draws it. */
 struct FDriftMenuItem
