@@ -150,8 +150,8 @@ float ADriftHUD::TextWidth(const FString& Str, float Scale) const
 FString ADriftHUD::DrivingHints() const
 {
 	auto K = [](const TCHAR* Id) { return DriftKeys::KeyName(DriftKeys::Get(FName(Id))).ToUpper(); };
-	return FString::Printf(TEXT("%s/%s gas/brake   %s/%s steer   %s handbrake   %s/%s gears   %s wipers   %s clutch kick   %s camera   %s forces   %s get out   %s checkpoint / next map   %s reset   ESC menu"),
-		*K(TEXT("Throttle")), *K(TEXT("Brake")), *K(TEXT("SteerLeft")), *K(TEXT("SteerRight")), *K(TEXT("Handbrake")),
+	return FString::Printf(TEXT("%s/%s gas/brake   %s part gas   %s/%s steer   %s handbrake   %s/%s gears   %s wipers   %s clutch kick   %s camera   %s forces   %s get out   %s checkpoint / next map   %s reset   ESC menu"),
+		*K(TEXT("Throttle")), *K(TEXT("Brake")), *K(TEXT("PartThrottle")), *K(TEXT("SteerLeft")), *K(TEXT("SteerRight")), *K(TEXT("Handbrake")),
 		*K(TEXT("GearDown")), *K(TEXT("GearUp")), *K(TEXT("Wipers")), *K(TEXT("Clutch")), *K(TEXT("Camera")),
 		*K(TEXT("Forces")), *K(TEXT("Exit")), *K(TEXT("Map")), *K(TEXT("Reset")));
 }

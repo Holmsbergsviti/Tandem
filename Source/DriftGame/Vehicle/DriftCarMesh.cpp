@@ -664,7 +664,7 @@ namespace CabinParts
 	}
 }
 
-void DriftCarMesh::BuildInterior(UProceduralMeshComponent* Mesh)
+void DriftCarMesh::BuildInterior(UProceduralMeshComponent* Mesh, float MirrorDrop)
 {
 	if (!Mesh) return;
 	Mesh->ClearAllMeshSections();
@@ -697,9 +697,9 @@ void DriftCarMesh::BuildInterior(UProceduralMeshComponent* Mesh)
 		Box(G, 27.6f, S * 60.f, GZ(78.f), 0.5f, 6.f, 2.f, FLinearColor(0.06f, 0.06f, 0.065f));
 	}
 	// Rear-view mirror on the roof just behind the windscreen.
-	Box(G, -6.f, 0.f, GZ(124.f), 1.f, 1.f, 4.f, Charcoal);
-	Box(G, -4.f, 0.f, GZ(119.f), 1.2f, 11.f, 3.f, Charcoal);
-	Box(G, -5.4f, 0.f, GZ(119.f), 0.2f, 10.f, 2.4f, FLinearColor(0.35f, 0.37f, 0.4f));
+	Box(G, -6.f, 0.f, GZ(124.f) - MirrorDrop, 1.f, 1.f, 4.f, Charcoal);
+	Box(G, -4.f, 0.f, GZ(119.f) - MirrorDrop, 1.2f, 11.f, 3.f, Charcoal);
+	Box(G, -5.4f, 0.f, GZ(119.f) - MirrorDrop, 0.2f, 10.f, 2.4f, FLinearColor(0.35f, 0.37f, 0.4f));
 	Box(G, 34.f, 0.f, GZ(64.f), 10.f, 14.f, 12.f, Charcoal);
 	Box(G, -18.f, 0.f, GZ(38.f), 40.f, 12.f, 9.f, Charcoal);
 	// Bucket seats with red bolsters (the bulkhead behind them doubles as the rear seat back).

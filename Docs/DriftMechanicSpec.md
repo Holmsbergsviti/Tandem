@@ -232,3 +232,13 @@ drift feels weak" and "controls feel numb". So:
 - Sharper controls: key-to-lock 0.08 s (0.14 s drifting, was 0.3), rack 450 deg/s with 0.03 s lag,
   throttle rise 0.1 s (was 0.25) and faster release.
 Still reasoned values, not driven.
+
+### Camera, part throttle, NSX and circuit fixes (10 Nov, late)
+- Chase cameras swing towards the direction of travel by 65% of the slide angle (max 40 deg, smoothed).
+- Part throttle: hold Left Ctrl (rebindable) with W for 55% throttle, to balance a drift on the keyboard.
+- NSX: rear-view mirror lowered 9 cm (it poked through the lower roof); engine loops pitched 1.3x (V6).
+  Not seen on screen: the long cowl ahead of the dash and the shared seats may still look off.
+- Circuits checked from their built geometry (no folded kerbs or rails, 29 m or more between rails of
+  separate road parts, turn per 2.7 m step under 9 deg). Sweeper Ring and Snake Hill had a 4-5 m seam step
+  that made a short 9-11% bump; the seam point is removed.
+- The project is now a git repository (first commit c5078f7, work on branch drift-feel).

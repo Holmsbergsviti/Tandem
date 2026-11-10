@@ -36,7 +36,8 @@ namespace DriftCarMesh
 
 	// Cockpit parts (body-local cm, vertex coloured). Right-hand drive.
 	/** Section 0: trim, seats, harnesses, mirror. Section 1: lit instrument dials. Section 2: roll cage. */
-	void BuildInterior(UProceduralMeshComponent* Mesh);
+	/** MirrorDrop lowers the rear-view mirror (cm) for a car with a lower roof. */
+	void BuildInterior(UProceduralMeshComponent* Mesh, float MirrorDrop = 0.f);
 	/** Instrument needle: points +Z from its pivot in the Y-Z plane (turn it with roll). */
 	void BuildNeedle(UProceduralMeshComponent* Mesh, float Length);
 	/** Dial centres (body-local cm) of the rev counter (0-9000 rpm) and speedometer (0-220 km/h). */

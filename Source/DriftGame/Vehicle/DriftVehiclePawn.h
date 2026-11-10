@@ -244,6 +244,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Engine") float EngineBrakeNm = 22.f;
 	/** Seconds for the keyboard throttle to go from 0 to full. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Engine") float ThrottleRiseTime = 0.1f;
+	/** Throttle with the part-throttle key held (keyboard W is all or nothing; this is the half-open pedal
+	 *  for balancing a drift). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Engine") float PartThrottle = 0.55f;
+	/** Chase cameras swing round towards where the car is going by this share of the slide angle, up to
+	 *  ChaseSlideMaxDeg, so you see the car sideways and the road it is sliding along. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Camera") float ChaseSlideFollow = 0.65f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Camera") float ChaseSlideMaxDeg = 40.f;
 	/** T50 5-speed. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drivetrain") TArray<float> GearRatios = { 3.587f, 2.022f, 1.384f, 1.0f, 0.861f };
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drivetrain") float ReverseRatio = 3.484f;
@@ -281,6 +288,8 @@ private:
 	void OnSteer(const FInputActionValue& V);
 	void OnHandbrakeStart(const FInputActionValue& V);
 	void OnHandbrakeEnd(const FInputActionValue& V);
+	void OnPartThrottleStart();
+	void OnPartThrottleEnd();
 	void OnGearDown();
 	void OnGearUp();
 	void ShiftTo(int32 NewGear);
@@ -318,6 +327,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputMappingContext> MappingContext;
 	UPROPERTY() TObjectPtr<UInputAction> IA_Throttle;
 	UPROPERTY() TObjectPtr<UInputAction> IA_Brake;
+	UPROPERTY() TObjectPtr<UInputAction> IA_PartThrottle;
 	UPROPERTY() TObjectPtr<UInputAction> IA_Steer;
 	UPROPERTY() TObjectPtr<UInputAction> IA_Handbrake;
 	UPROPERTY() TObjectPtr<UInputAction> IA_GearDown;
@@ -347,6 +357,9 @@ private:
 	float EngineTorqueNow = 0.f; // Nm at the crank this frame (negative = engine braking)
 	bool bClutchSlipping = false;
 	int32 CarModel = 0;
+	bool bPartThrottleIn = false;
+	float ChaseSlideYaw = 0.f;       // chase camera's swing into the slide, deg
+	float EnginePitchScale = 1.f;    // more cylinders fire more often at the same rpm
 	// Snap-back damping (see bDriftAngleHold).
 	bool bHoldOn = false;
 	bool bHoldSpent = false;       // the drift ended with the countersteer key down: ignored until released

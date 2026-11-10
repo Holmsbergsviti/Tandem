@@ -364,7 +364,7 @@ void ADriftVehiclePawn::BuildVisuals()
 {
 	DriftCarMesh::BuildBody(CarBody, PaintColor, DoorL, DoorR, CarModel);
 	for (FDriftWheel& W : Wheels) DriftCarMesh::BuildWheel(W.Visual, WheelRadius, TyreHalfWidth);
-	DriftCarMesh::BuildInterior(Interior);
+	DriftCarMesh::BuildInterior(Interior, CarModel == 1 ? 9.f : 0.f);
 	Interior->SetMeshSectionVisible(2, CarModel == 0); // the AE86 has a cage; the NSX's lower roof doesn't fit it
 	DriftCarMesh::BuildSteeringWheel(SteeringWheel);
 	DriftCarMesh::BuildHandbrakeLever(HandbrakeLever);
@@ -621,7 +621,7 @@ void ADriftVehiclePawn::OnExitCar()
 	if (!Driver) return;
 	Driver->SetCar(this);
 
-	ThrottleIn = 0.f; BrakeIn = 0.f; SteerIn = 0.f; bHandbrakeIn = false;
+	ThrottleIn = 0.f; BrakeIn = 0.f; SteerIn = 0.f; bHandbrakeIn = false; bPartThrottleIn = false;
 	bOccupied = false;
 	OpenDoorBriefly(DriverSide);
 	PC->Possess(Driver);
@@ -714,6 +714,8 @@ void ADriftVehiclePawn::ApplyCarSpec(int32 Model)
 	BrakeBias = C.BrakeBias;
 	MaxSteerDeg = C.Steer;
 	PaintColor = C.Paint;
+	// Same recorded loops for both cars; the V6 fires six times in two turns against four, so it sits higher.
+	EnginePitchScale = CarModel == 1 ? 1.3f : 1.f;
 	// Tyre values everyone tunes start from the class defaults.
 	TyreGrip = Def->TyreGrip;
 	TyreGripRear = Def->TyreGripRear;
@@ -804,6 +806,7 @@ void ADriftVehiclePawn::BuildInput()
 	{
 		IA_Throttle  = MakeAction(this, TEXT("IA_Throttle"),  EInputActionValueType::Axis1D);
 		IA_Brake     = MakeAction(this, TEXT("IA_Brake"),     EInputActionValueType::Axis1D);
+		IA_PartThrottle = MakeAction(this, TEXT("IA_PartThrottle"), EInputActionValueType::Boolean);
 		IA_Steer     = MakeAction(this, TEXT("IA_Steer"),     EInputActionValueType::Axis1D);
 		IA_Handbrake = MakeAction(this, TEXT("IA_Handbrake"), EInputActionValueType::Boolean);
 		IA_GearDown  = MakeAction(this, TEXT("IA_GearDown"),  EInputActionValueType::Boolean);
@@ -831,6 +834,7 @@ void ADriftVehiclePawn::BuildMappings()
 	auto Key = [](const TCHAR* Id) { return DriftKeys::Get(FName(Id)); };
 	MappingContext->MapKey(IA_Throttle, Key(TEXT("Throttle")));
 	MappingContext->MapKey(IA_Brake, Key(TEXT("Brake")));
+	MappingContext->MapKey(IA_PartThrottle, Key(TEXT("PartThrottle")));
 	MappingContext->MapKey(IA_Steer, Key(TEXT("SteerRight")));
 	FEnhancedActionKeyMapping& Left = MappingContext->MapKey(IA_Steer, Key(TEXT("SteerLeft")));
 	Left.Modifiers.Add(NewObject<UInputModifierNegate>(MappingContext));
@@ -881,6 +885,8 @@ void ADriftVehiclePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	{
 		EIC->BindAction(IA_Throttle,  ETriggerEvent::Triggered, this, &ADriftVehiclePawn::OnThrottle);
 		EIC->BindAction(IA_Throttle,  ETriggerEvent::Completed, this, &ADriftVehiclePawn::OnThrottle);
+		EIC->BindAction(IA_PartThrottle, ETriggerEvent::Started, this, &ADriftVehiclePawn::OnPartThrottleStart);
+		EIC->BindAction(IA_PartThrottle, ETriggerEvent::Completed, this, &ADriftVehiclePawn::OnPartThrottleEnd);
 		EIC->BindAction(IA_Brake,     ETriggerEvent::Triggered, this, &ADriftVehiclePawn::OnBrake);
 		EIC->BindAction(IA_Brake,     ETriggerEvent::Completed, this, &ADriftVehiclePawn::OnBrake);
 		EIC->BindAction(IA_Steer,     ETriggerEvent::Triggered, this, &ADriftVehiclePawn::OnSteer);
@@ -902,6 +908,8 @@ void ADriftVehiclePawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 }
 
 void ADriftVehiclePawn::OnThrottle(const FInputActionValue& V) { ThrottleIn = FMath::Clamp(V.Get<float>(), 0.f, 1.f); }
+void ADriftVehiclePawn::OnPartThrottleStart() { bPartThrottleIn = true; }
+void ADriftVehiclePawn::OnPartThrottleEnd()   { bPartThrottleIn = false; }
 void ADriftVehiclePawn::OnBrake(const FInputActionValue& V)    { BrakeIn = FMath::Clamp(V.Get<float>(), 0.f, 1.f); }
 void ADriftVehiclePawn::OnSteer(const FInputActionValue& V)    { SteerIn = FMath::Clamp(V.Get<float>(), -1.f, 1.f); }
 void ADriftVehiclePawn::OnHandbrakeStart(const FInputActionValue& V) { bHandbrakeIn = true; }
@@ -968,7 +976,7 @@ void ADriftVehiclePawn::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	const float Dt = FMath::Clamp(DeltaSeconds, 0.001f, 1.f / 30.f);
 
-	float ThrottleTarget = ThrottleIn, Brake = BrakeIn, Steer = SteerIn;
+	float ThrottleTarget = ThrottleIn * (bPartThrottleIn ? PartThrottle : 1.f), Brake = BrakeIn, Steer = SteerIn;
 	bool bHandbrake = bHandbrakeIn;
 	// Locked (countdown / finished) or nobody inside: parked on the handbrake.
 	if (bInputLocked || !bOccupied) { ThrottleTarget = 0.f; Brake = 0.f; Steer = 0.f; bHandbrake = true; }
@@ -1518,6 +1526,11 @@ void ADriftVehiclePawn::UpdateSpeedFeel(float Dt)
 	const bool bOutside = CamModes[CameraIndex].bLag;    // chase cameras
 	Camera->SetFieldOfView(BaseFov + (bOutside ? 14.f : 9.f) * K * K * (3.f - 2.f * K));
 
+	// Chase cameras swing towards the direction of travel in a slide (the car turns under the camera).
+	const float WantYaw = (bOutside && bOccupied) ? FMath::Clamp(BodySlipDeg * ChaseSlideFollow, -ChaseSlideMaxDeg, ChaseSlideMaxDeg) : 0.f;
+	ChaseSlideYaw = FMath::FInterpTo(ChaseSlideYaw, WantYaw, Dt, 3.5f);
+	if (bOutside) SpringArm->SetRelativeRotation(FRotator(CamModes[CameraIndex].Pitch, ChaseSlideYaw, 0.f));
+
 	ShakeTime += Dt;
 	float Slide = 0.f;
 	for (const FDriftWheel& W : Wheels) if (W.bGrounded) Slide = FMath::Max(Slide, W.SlideSpeed);
@@ -1537,8 +1550,8 @@ void ADriftVehiclePawn::UpdateAudio(float Dt)
 	// Engine: low loop below ~3000 rpm, high loop above, each pitched from the rpm it was made at.
 	const float Fade = FMath::Clamp((RPM - 2800.f) / 900.f, 0.f, 1.f);
 	const float Load = 0.5f + 0.5f * ThrottleSmooth;
-	EngineLowAudio->SetPitchMultiplier(FMath::Clamp(RPM / 1800.f, 0.45f, 2.f));
-	EngineHighAudio->SetPitchMultiplier(FMath::Clamp(RPM / 5000.f, 0.5f, 2.f));
+	EngineLowAudio->SetPitchMultiplier(FMath::Clamp(RPM / 1800.f * EnginePitchScale, 0.45f, 2.4f));
+	EngineHighAudio->SetPitchMultiplier(FMath::Clamp(RPM / 5000.f * EnginePitchScale, 0.5f, 2.4f));
 	EngineLowAudio->SetVolumeMultiplier(FMath::Max(0.001f, 0.7f * (1.f - Fade) * Load * Master));
 	EngineHighAudio->SetVolumeMultiplier(FMath::Max(0.001f, 0.8f * Fade * Load * Master));
 

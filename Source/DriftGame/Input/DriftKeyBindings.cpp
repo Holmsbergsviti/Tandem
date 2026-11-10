@@ -23,6 +23,7 @@ namespace DriftKeys
 	{
 		static const TArray<FBinding> List = {
 			{ FName(TEXT("Throttle")),   TEXT("Accelerate"),        EKeys::W },
+			{ FName(TEXT("PartThrottle")), TEXT("Part throttle (hold)"), EKeys::LeftControl },
 			{ FName(TEXT("Brake")),      TEXT("Brake"),             EKeys::S },
 			{ FName(TEXT("SteerLeft")),  TEXT("Steer left"),        EKeys::A },
 			{ FName(TEXT("SteerRight")), TEXT("Steer right"),       EKeys::D },
