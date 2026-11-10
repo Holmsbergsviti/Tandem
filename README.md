@@ -34,7 +34,9 @@ If `--run` seems to do nothing, an old copy is stuck: `pkill -f Tandem.app; pkil
   (Drift Park, Sweeper Ring, Snake Hill).
 - No traction control or steering assists. The one help is snap-back damping, which can be switched off
   in Tuning.
-- Drive recorder: every drive is saved to `~/Documents/Tandem/Drives/drive_<time>.csv` (20 rows a second:
+- Crash damage: bumpers, spoiler and doors come off one at a time; a hard hit on the engine's end blows the
+  engine. Backspace, M or a map change gives you a repaired car.
+- Drive recorder: every drive is saved to `~/Library/Containers/com.tandem.game/Data/Documents/Tandem/Drives/drive_<time>.csv` (the packaged app is sandboxed) (20 rows a second:
   speed, slide angle, steering, throttle, wheel slip, ...), for tuning the handling. The ten newest are kept.
 
 ## Layout

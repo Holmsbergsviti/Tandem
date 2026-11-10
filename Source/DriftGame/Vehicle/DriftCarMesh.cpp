@@ -423,13 +423,7 @@ namespace
 		AddArch(G, -127.f, 38.f, ArchTop, HW, Paint);
 
 		// Bumpers, lip, plates, sills, side intakes, spoiler, exhausts.
-		Box(G, 220.5f, 0.f, GZ(30.f), 3.f, 66.f, 7.f, Paint);
-		Box(G, 216.f, 0.f, GZ(17.5f), 7.f, 74.f, 1.5f, Trim);                 // front lip
-		Box(G, 222.4f, 0.f, GZ(29.f), 0.3f, 16.f, 5.5f, PlateWhite);
-		Box(G, 219.5f, 0.f, GZ(41.f), 2.f, 40.f, 2.5f, Liner);               // intake slot
-		Box(G, -221.f, 0.f, GZ(40.f), 3.f, 82.f, 8.f, Paint);
-		Box(G, -222.6f, 0.f, GZ(42.f), 0.3f, 17.f, 6.5f, PlateWhite);
-		Box(G, -215.f, 0.f, GZ(93.f), 9.f, 82.f, 1.3f, Paint, FRotator(4.f, 0.f, 0.f));  // integrated spoiler lip
+		// (Bumpers and the spoiler are separate parts that can be knocked off: see BuildLoosePart.)
 		for (int32 S = -1; S <= 1; S += 2)
 		{
 			Box(G, -224.f, S * 45.f, GZ(26.f), 4.f, 4.f, 3.f, Chrome);
@@ -513,17 +507,11 @@ void DriftCarMesh::BuildBody(UProceduralMeshComponent* Mesh, const FLinearColor&
 	AddArch(G, -125.f, 36.f, ArchTop, HW, Paint);
 
 	// Bumpers, front lip, plates.
-	Box(G, 210.5f, 0.f, GZ(38.f), 3.5f, 74.f, 10.f, Trim);
-	Box(G, 208.f, 0.f, GZ(25.5f), 6.f, 72.f, 2.f, Trim);
-	Box(G, 212.2f, 0.f, GZ(45.5f), 1.f, 30.f, 1.2f, Liner);
-	Box(G, 214.1f, 0.f, GZ(37.f), 0.3f, 16.f, 5.5f, PlateWhite);
-	Box(G, -210.f, 0.f, GZ(44.f), 4.f, 75.f, 9.f, Trim);
-	Box(G, -214.1f, 0.f, GZ(45.f), 0.3f, 17.f, 6.5f, PlateWhite);
+	// (Bumpers and the spoiler are separate parts that can be knocked off: see BuildLoosePart.)
 	// Nose grille strip and the tail-panel garnish between the lamps.
 	Box(G, 210.4f, 0.f, GZ(53.f), 0.8f, 44.f, 2.2f, Liner);
 	Box(G, -211.4f, 0.f, GZ(73.f), 0.9f, 32.f, 8.f, Liner);
 	// Hatch lip spoiler and exhaust.
-	Box(G, -203.f, 0.f, GZ(92.5f), 5.f, 70.f, 1.2f, Trim, FRotator(6.f, 0.f, 0.f));
 	Box(G, -212.f, -48.f, GZ(29.f), 5.f, 3.5f, 3.f, Chrome);
 
 	FProcGeo L;
@@ -842,5 +830,66 @@ void DriftCarMesh::BuildArm(UProceduralMeshComponent* Mesh)
 	}
 	FProcGeo G;
 	G.Loft(Rings, [](int32, int32) { return Sleeve; }, true);
+	G.Commit(Mesh, 0, false);
+}
+
+FVector DriftCarMesh::LoosePartPivot(int32 Model, int32 Part)
+{
+	if (Model == 1)
+	{
+		switch (Part)
+		{
+		case 0: return FVector(219.f, 0.f, GZ(28.f));
+		case 1: return FVector(-221.f, 0.f, GZ(40.f));
+		default: return FVector(-215.f, 0.f, GZ(93.f));
+		}
+	}
+	switch (Part)
+	{
+	case 0: return FVector(210.f, 0.f, GZ(35.f));
+	case 1: return FVector(-210.f, 0.f, GZ(44.f));
+	default: return FVector(-203.f, 0.f, GZ(92.5f));
+	}
+}
+
+void DriftCarMesh::BuildLoosePart(UProceduralMeshComponent* Mesh, int32 Model, int32 Part, const FLinearColor& Paint)
+{
+	if (!Mesh) return;
+	Mesh->ClearAllMeshSections();
+	FProcGeo G;
+	if (Model == 1)
+	{
+		if (Part == 0)
+		{
+			Box(G, 220.5f, 0.f, GZ(30.f), 3.f, 66.f, 7.f, Paint);
+			Box(G, 216.f, 0.f, GZ(17.5f), 7.f, 74.f, 1.5f, Trim);        // front lip
+			Box(G, 222.4f, 0.f, GZ(29.f), 0.3f, 16.f, 5.5f, PlateWhite);
+			Box(G, 219.5f, 0.f, GZ(41.f), 2.f, 40.f, 2.5f, Liner);       // intake slot
+		}
+		else if (Part == 1)
+		{
+			Box(G, -221.f, 0.f, GZ(40.f), 3.f, 82.f, 8.f, Paint);
+			Box(G, -222.6f, 0.f, GZ(42.f), 0.3f, 17.f, 6.5f, PlateWhite);
+		}
+		else Box(G, -215.f, 0.f, GZ(93.f), 9.f, 82.f, 1.3f, Paint, FRotator(4.f, 0.f, 0.f)); // spoiler lip
+	}
+	else
+	{
+		if (Part == 0)
+		{
+			Box(G, 210.5f, 0.f, GZ(38.f), 3.5f, 74.f, 10.f, Trim);
+			Box(G, 208.f, 0.f, GZ(25.5f), 6.f, 72.f, 2.f, Trim);
+			Box(G, 212.2f, 0.f, GZ(45.5f), 1.f, 30.f, 1.2f, Liner);
+			Box(G, 214.1f, 0.f, GZ(37.f), 0.3f, 16.f, 5.5f, PlateWhite);
+		}
+		else if (Part == 1)
+		{
+			Box(G, -210.f, 0.f, GZ(44.f), 4.f, 75.f, 9.f, Trim);
+			Box(G, -214.1f, 0.f, GZ(45.f), 0.3f, 17.f, 6.5f, PlateWhite);
+		}
+		else Box(G, -203.f, 0.f, GZ(92.5f), 5.f, 70.f, 1.2f, Trim, FRotator(6.f, 0.f, 0.f)); // hatch lip spoiler
+	}
+	const FVector Pivot = LoosePartPivot(Model, Part);
+	for (FVector& V : G.Verts) V -= Pivot;
 	G.Commit(Mesh, 0, false);
 }

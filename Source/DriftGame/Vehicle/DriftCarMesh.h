@@ -31,6 +31,11 @@ namespace DriftCarMesh
 	 *  Doors (optional, built relative to DoorHinge): section 0 paint/trim, 1 glass. */
 	void BuildBody(UProceduralMeshComponent* Mesh, const FLinearColor& Paint,
 		UProceduralMeshComponent* DoorLeft = nullptr, UProceduralMeshComponent* DoorRight = nullptr, int32 Model = 0);
+	/** Parts that can be knocked off in a crash, each its own mesh built round its pivot (body-local cm):
+	 *  0 front bumper (with lip and plate), 1 rear bumper, 2 spoiler. The doors are the door meshes above. */
+	constexpr int32 NumLooseParts = 3;
+	FVector LoosePartPivot(int32 Model, int32 Part);
+	void BuildLoosePart(UProceduralMeshComponent* Mesh, int32 Model, int32 Part, const FLinearColor& Paint);
 	/** Section 0: tyre. Section 1: rim. Wheel axis is Y, outer face at +Y. */
 	void BuildWheel(UProceduralMeshComponent* Mesh, float Radius, float HalfWidth);
 

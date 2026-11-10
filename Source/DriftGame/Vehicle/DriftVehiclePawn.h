@@ -16,6 +16,7 @@ class UMaterialInterface;
 class UProceduralMeshComponent;
 class UInstancedStaticMeshComponent;
 class UAudioComponent;
+class UPointLightComponent;
 class ADriftDriverCharacter;
 
 /** Per-wheel state. Forces in newtons, speeds in m/s unless noted. */
@@ -39,6 +40,22 @@ struct FDriftWheel
 	UPROPERTY() FVector TyreForceWorld = FVector::ZeroVector; // N
 	UPROPERTY() float SlideSpeed = 0.f;    // how fast the contact patch scrubs over the road, m/s
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> Visual = nullptr;
+};
+
+/** A part that a crash can knock off (bumper, spoiler, door). Once off it tumbles and comes to rest. */
+struct FDriftLoosePart
+{
+	UProceduralMeshComponent* Mesh = nullptr;
+	USceneComponent* HomeParent = nullptr; // what it hangs on while attached
+	FVector Home = FVector::ZeroVector;    // its place on HomeParent
+	int32 Zone = 0;                        // 0 front, 1 rear, 2 left, 3 right
+	float Strength = 8.f;                  // crash speed it takes in total before it comes off, m/s
+	float Damage = 0.f;
+	bool bGone = false;
+	bool bResting = false;
+	FVector Vel = FVector::ZeroVector;     // cm/s
+	FVector SpinAxis = FVector::UpVector;
+	float SpinDegPerSec = 0.f;
 };
 
 /** One tyre-smoke puff (world space). */
@@ -162,6 +179,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UStaticMeshComponent> WiperBlade;
 	/** Tyre smoke puffs (world space, pooled). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UInstancedStaticMeshComponent> TyreSmoke;
+	/** Bumpers and spoiler: their own meshes so a crash can knock them off (see FDriftLoosePart). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UProceduralMeshComponent> PartFrontBumper;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UProceduralMeshComponent> PartRearBumper;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UProceduralMeshComponent> PartSpoiler;
+	/** Engine fire after it has blown: a flickering light and a ball of flame. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UPointLightComponent> FireLight;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UStaticMeshComponent> FireBall;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera") TObjectPtr<USpringArmComponent> SpringArm;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera") TObjectPtr<UCameraComponent> Camera;
 
@@ -276,6 +300,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Brakes") float HandbrakeTorque = 1600.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drift") bool bInputLocked = false;
+	// ---- Crash damage. Backspace, M and changing map give you a repaired car. ----
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage") bool bDamage = true;
+	/** A knock slower than this (m/s of speed lost in the hit) does no damage. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage") float DamageMinHit = 1.5f;
+	/** The engine takes this much crash speed in total (m/s) on its end of the car before it blows... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage") float EngineStrength = 26.f;
+	/** ...or one hit this hard (m/s, about 45 km/h into something solid). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Damage") float EngineBlowHit = 12.5f;
+	bool IsEngineBlown() const { return bEngineBlown; }
+	float GetEngineHealth() const { return FMath::Clamp(1.f - EngineDamage / FMath::Max(EngineStrength, 1.f), 0.f, 1.f); }
+
 	/** Writes the drive recorder files (see RecPath). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drift") bool bRecordDrives = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Car") FLinearColor PaintColor = FLinearColor(0.82f, 0.82f, 0.8f); // white over black two-tone
@@ -319,6 +354,14 @@ private:
 	void BuildVisuals();
 	void OpenDoorBriefly(int32 Side);
 	void UpdateSmoke(float Dt);
+	void EmitPuff(const FVector& Pos, const FVector& Vel, float Life, float StartSize, float EndSize);
+	void SetupLooseParts();
+	void TakeHit(const FVector& WorldPoint, const FVector& WorldNormal, float HitSpeed);
+	void KnockOff(FDriftLoosePart& Part, const FVector& Push);
+	void BlowEngine();
+	void UpdateDamage(float Dt);
+	void RepairCar();
+	FVector EngineLocalPos() const;
 
 	static constexpr int32 MaxPuffs = 180;
 	TArray<FDriftSmokePuff> Puffs;
@@ -359,6 +402,12 @@ private:
 	bool bClutchSlipping = false;
 	int32 CarModel = 0;
 	bool bPartThrottleIn = false;
+	TArray<FDriftLoosePart> LooseParts;
+	float EngineDamage = 0.f;       // crash speed taken on the engine's end so far, m/s
+	bool bEngineBlown = false;
+	float FireAge = 0.f;
+	float HitCooldown = 0.f;
+	float EngineSmokeCarry = 0.f;
 	// Drive recorder: what the car did, 20 times a second, to ~/Documents/Tandem/Drives/drive_<time>.csv
 	// (for tuning the handling from real driving). The ten newest files are kept.
 	FString RecPath;

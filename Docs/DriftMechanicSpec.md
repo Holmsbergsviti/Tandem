@@ -248,7 +248,26 @@ Still reasoned values, not driven.
   90 and 250 Hz, level matched to the four-cylinder loops); `setup_materials.py` imports them as
   `S_EngineLowV6` / `S_EngineHighV6`. Until they are in a build the NSX uses the old loops pitched 1.3x.
   Checked by numbers only (level, clean loop seam, spectrum), not by ear.
-- Drive recorder: `~/Documents/Tandem/Drives/drive_<time>.csv`, 20 rows a second while someone is in the
+- Drive recorder: `~/Library/Containers/com.tandem.game/Data/Documents/Tandem/Drives/drive_<time>.csv` (the packaged app is sandboxed), 20 rows a second while someone is in the
   car (speed, slide angle, yaw rate, steering key and front wheel angle, throttle, brake, handbrake, gear,
   rpm, g, rear wheel speed, wheel slip and loads, position). Ten newest files kept. `bRecordDrives` turns it off.
 - Removed the unused scoring component and the empty DriftWheels files; README rewritten.
+
+### Crash damage (10 Nov, night)
+Boss: parts should fall off in collisions, not all at once; too hard a hit on the motor should make it explode.
+- A hit is measured as the speed it took off the car (contact impulse / mass, m/s). Under 1.5 m/s does
+  nothing; one crash counts once (0.35 s cooldown). Hits on the roof or floor do not count.
+- The side that was hit (front, rear, left, right) is found from where the contact is on the body. Every
+  part on that side adds the hit to its damage; at most one part comes off per crash, the weakest that
+  has had enough: front bumper 7, rear bumper 7, spoiler 14 (rear), doors 9 (their side).
+- A part that comes off leaves with the car's speed at that point plus a shove, tumbles under gravity,
+  bounces and comes to rest (simple per-part motion, no collision with the car).
+- Engine: AE86 in the nose, NSX behind the seats. Hits on that end add up; past 40% of 26 m/s it smokes.
+  At 26 m/s in total, or one hit of 12.5 m/s (about 45 km/h into something solid), it blows: blast
+  (upward kick under the engine, parts on that end blown off, smoke burst, flash, sound), then fire and
+  smoke, and the engine is dead and out of gear, so the car only coasts.
+- Backspace, M (checkpoint or next map) and the menu's map change repair everything.
+Bumpers and spoiler became their own meshes for this (`DriftCarMesh::BuildLoosePart`).
+First look at the recorder (NSX, 29 min, tuned to 490 Nm / 1000 kg / 9000 rpm): 123 drifts of 1 s or
+more, 42% ended cleanly, 41% snapped the other way, 16% spun; 96% in 2nd gear, on the rev limiter half
+of the time. Clean exits rose from 36% to 48% between the first and second half of the drive.

@@ -16,6 +16,9 @@
 #include "HAL/PlatformProcess.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Track/DriftScenery.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Camera/CameraComponent.h"
@@ -46,6 +49,7 @@ namespace
 	// The NSX's V6 loops, same rpm (Scripts/Audio/make_v6.py). Missing until setup_materials.py has run once.
 	const TCHAR* EngineLowV6SoundPath = TEXT("/Game/Audio/S_EngineLowV6.S_EngineLowV6");
 	const TCHAR* EngineHighV6SoundPath = TEXT("/Game/Audio/S_EngineHighV6.S_EngineHighV6");
+	const TCHAR* ExplosionSoundPath = TEXT("/Game/Audio/S_Explosion.S_Explosion");
 	const TCHAR* WindSoundPath = TEXT("/Game/Audio/S_Wind.S_Wind");
 	const TCHAR* TyreSoundPath = TEXT("/Game/Audio/S_TyreSqueal.S_TyreSqueal");
 	constexpr int32 CockpitCameraIndex = 1;
@@ -296,6 +300,22 @@ ADriftVehiclePawn::ADriftVehiclePawn()
 	TyreSmoke->SetNumCustomDataFloats(1); // per-puff opacity
 
 	// Instrument needles (rev counter, speedometer), turned about X every frame.
+	// Parts a crash can knock off, and the engine fire (hidden until the engine blows).
+	PartFrontBumper = MakeProc(this, TEXT("PartFrontBumper"), Body, DriftCarMesh::LoosePartPivot(0, 0));
+	PartRearBumper  = MakeProc(this, TEXT("PartRearBumper"), Body, DriftCarMesh::LoosePartPivot(0, 1));
+	PartSpoiler     = MakeProc(this, TEXT("PartSpoiler"), Body, DriftCarMesh::LoosePartPivot(0, 2));
+	for (UProceduralMeshComponent* Part : { PartFrontBumper.Get(), PartRearBumper.Get(), PartSpoiler.Get() }) Part->SetCastShadow(true);
+	FireLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FireLight"));
+	FireLight->SetupAttachment(Body);
+	FireLight->SetLightColor(FLinearColor(1.f, 0.42f, 0.08f));
+	FireLight->SetAttenuationRadius(1800.f);
+	FireLight->SetCastShadows(false);
+	FireLight->SetIntensity(0.f);
+	FireLight->SetVisibility(false);
+	FireBall = MakePart(this, TEXT("FireBall"), Body, SphereF.Object, FVector::ZeroVector, FVector(0.5f));
+	FireBall->SetCastShadow(false);
+	FireBall->SetVisibility(false);
+
 	TachNeedle  = MakeProc(this, TEXT("TachNeedle"), Body, DriftCarMesh::TachCentre());
 	SpeedNeedle = MakeProc(this, TEXT("SpeedNeedle"), Body, DriftCarMesh::SpeedoCentre());
 
@@ -367,6 +387,9 @@ void ADriftVehiclePawn::OnConstruction(const FTransform& Transform)
 void ADriftVehiclePawn::BuildVisuals()
 {
 	DriftCarMesh::BuildBody(CarBody, PaintColor, DoorL, DoorR, CarModel);
+	DriftCarMesh::BuildLoosePart(PartFrontBumper, CarModel, 0, PaintColor);
+	DriftCarMesh::BuildLoosePart(PartRearBumper, CarModel, 1, PaintColor);
+	DriftCarMesh::BuildLoosePart(PartSpoiler, CarModel, 2, PaintColor);
 	for (FDriftWheel& W : Wheels) DriftCarMesh::BuildWheel(W.Visual, WheelRadius, TyreHalfWidth);
 	DriftCarMesh::BuildInterior(Interior, CarModel == 1 ? 9.f : 0.f);
 	Interior->SetMeshSectionVisible(2, CarModel == 0); // the AE86 has a cage; the NSX's lower roof doesn't fit it
@@ -403,6 +426,9 @@ void ADriftVehiclePawn::BuildVisuals()
 		DoorL->SetMaterial(1, GlassOrFallback);
 		DoorR->SetMaterial(0, PaintMID);
 		DoorR->SetMaterial(1, GlassOrFallback);
+		PartFrontBumper->SetMaterial(0, PaintMID);
+		PartRearBumper->SetMaterial(0, PaintMID);
+		PartSpoiler->SetMaterial(0, PaintMID);
 		UMaterialInstanceDynamic* CabinMID = MakeMID(0.7f, 0.f, 0.f);
 		UMaterialInstanceDynamic* MetalMID = MakeMID(0.35f, 0.6f, 0.f);
 		Interior->SetMaterial(0, CabinMID);
@@ -760,6 +786,9 @@ void ADriftVehiclePawn::ApplyCarSpec(int32 Model)
 	}
 	if (DoorHingeL) DoorHingeL->SetRelativeLocation(DriftCarMesh::DoorHinge(0, CarModel));
 	if (DoorHingeR) DoorHingeR->SetRelativeLocation(DriftCarMesh::DoorHinge(1, CarModel));
+	RepairCar();
+	SetupLooseParts();
+	for (int32 i = 0; i < 3 && i < LooseParts.Num(); ++i) LooseParts[i].Mesh->SetRelativeLocationAndRotation(LooseParts[i].Home, FRotator::ZeroRotator);
 	BuildVisuals();
 	ApplyTuning();
 }
@@ -1151,6 +1180,7 @@ void ADriftVehiclePawn::Tick(float DeltaSeconds)
 
 	UpdateCockpit(Dt);
 	UpdateDoors(Dt);
+	UpdateDamage(Dt);
 	UpdateSmoke(Dt);
 	UpdateSpeedFeel(Dt);
 	UpdateAudio(Dt);
@@ -1223,7 +1253,8 @@ void ADriftVehiclePawn::SimulateWheels(float Dt, float Throttle, float Brake, bo
 	//         friction clutch that can carry at most ClutchMaxNm. Revs the engine stores get dumped into
 	//         the tyres when the clutch bites (clutch kick); a downshift without a blip drags them (shift-lock).
 	const float Ratio = CurrentRatio(); // signed: reverse is negative; includes the final drive
-	const bool bClutchDown = Gear == 0 || bHandbrake || ClutchKickTimer > 0.f || ShiftClutchTimer > 0.f;
+	// A blown engine is seized and out of gear: the car only coasts.
+	const bool bClutchDown = Gear == 0 || bHandbrake || ClutchKickTimer > 0.f || ShiftClutchTimer > 0.f || bEngineBlown;
 	if (bClutchDown)
 	{
 		// Kick and handbrake: the pedal is snapped back up, so the clutch bites at once on release.
@@ -1299,7 +1330,8 @@ void ADriftVehiclePawn::SimulateWheels(float Dt, float Throttle, float Brake, bo
 		float EngineNm = 0.f;
 		if (Throttle * ShiftLift > 0.02f) EngineNm = EngRpm < MaxRPM ? EngineTorqueAt(EngRpm) * Throttle : 0.f; // limiter
 		else EngineNm = -EngineBrakeNm * (EngRpm / MaxRPM);
-		if (EngineOmega < IdleOmega) EngineNm = FMath::Max(EngineNm, 40.f * (IdleOmega - EngineOmega) / 10.47f); // idle control
+		if (bEngineBlown) EngineNm = -60.f * FMath::Min(1.f, EngineOmega / 20.f); // no power; it grinds to a stop
+		else if (EngineOmega < IdleOmega) EngineNm = FMath::Max(EngineNm, 40.f * (IdleOmega - EngineOmega) / 10.47f); // idle control
 
 		// Clutch: the torque that would make engine and gearbox turn together this step, up to what it can hold.
 		float ClutchNm = 0.f;
@@ -1420,6 +1452,20 @@ void ADriftVehiclePawn::SimulateWheels(float Dt, float Throttle, float Brake, bo
 	// Gravity is applied by the physics engine (m * 9.81 N straight down at the centre of mass).
 }
 
+void ADriftVehiclePawn::EmitPuff(const FVector& Pos, const FVector& Vel, float Life, float StartSize, float EndSize)
+{
+	if (Puffs.Num() != MaxPuffs) return; // pool not built yet
+	FDriftSmokePuff& P = Puffs[NextPuff];
+	NextPuff = (NextPuff + 1) % MaxPuffs;
+	P.bActive = true;
+	P.Age = 0.f;
+	P.Life = Life;
+	P.Pos = Pos;
+	P.Vel = Vel;
+	P.StartSize = StartSize;
+	P.EndSize = EndSize;
+}
+
 void ADriftVehiclePawn::UpdateSmoke(float Dt)
 {
 	if (!TyreSmoke) return;
@@ -1434,6 +1480,7 @@ void ADriftVehiclePawn::UpdateSmoke(float Dt)
 		}
 	}
 
+	// (Engine smoke and blast puffs are added by EmitPuff from UpdateDamage, into the same pool.)
 	// Emit: each tyre puffs in proportion to how fast it is scrubbing (wheelspin, lock-up or sideways).
 	const FVector CarVel = GetVelocity();
 	for (int32 w = 0; w < Wheels.Num() && w < 4; ++w)
@@ -1532,6 +1579,173 @@ void ADriftVehiclePawn::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UP
 	FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
+	// How hard: the speed the hit took off the car (impulse / mass). Landing on the wheels' side doesn't count.
+	if (!bDamage || FMath::Abs(HitNormal.Z) > 0.6f) return;
+	TakeHit(HitLocation, HitNormal, static_cast<float>(NormalImpulse.Size()) / FMath::Max(MassKg, 1.f) * 0.01f);
+}
+
+// ---------------- Crash damage ----------------
+
+FVector ADriftVehiclePawn::EngineLocalPos() const
+{
+	// AE86: engine in the nose. NSX: behind the seats.
+	return CarModel == 1 ? FVector(-105.f, 0.f, 12.f) : FVector(150.f, 0.f, 12.f);
+}
+
+void ADriftVehiclePawn::SetupLooseParts()
+{
+	// Weakest first on each end, so they come off one after another: bumper, then spoiler.
+	LooseParts.Reset();
+	auto Add = [this](UProceduralMeshComponent* Mesh, USceneComponent* Parent, const FVector& Home, int32 Zone, float Strength)
+	{
+		FDriftLoosePart& P = LooseParts.AddDefaulted_GetRef();
+		P.Mesh = Mesh; P.HomeParent = Parent; P.Home = Home; P.Zone = Zone; P.Strength = Strength;
+	};
+	Add(PartFrontBumper, Body, DriftCarMesh::LoosePartPivot(CarModel, 0), 0, 7.f);
+	Add(PartRearBumper, Body, DriftCarMesh::LoosePartPivot(CarModel, 1), 1, 7.f);
+	Add(PartSpoiler, Body, DriftCarMesh::LoosePartPivot(CarModel, 2), 1, 14.f);
+	Add(DoorL, DoorHingeL, FVector::ZeroVector, 2, 9.f);
+	Add(DoorR, DoorHingeR, FVector::ZeroVector, 3, 9.f);
+}
+
+void ADriftVehiclePawn::TakeHit(const FVector& WorldPoint, const FVector& WorldNormal, float HitSpeed)
+{
+	if (HitCooldown > 0.f || HitSpeed < DamageMinHit || LooseParts.Num() == 0) return;
+	HitCooldown = 0.35f; // one crash is one hit, however many contact reports it makes
+
+	// Which end or side was hit.
+	const FVector Local = GetActorTransform().InverseTransformPosition(WorldPoint);
+	const FVector Ext = Body->GetUnscaledBoxExtent();
+	const float FX = static_cast<float>(Local.X / Ext.X), FY = static_cast<float>(Local.Y / Ext.Y);
+	const int32 Zone = FMath::Abs(FX) >= FMath::Abs(FY) ? (FX > 0.f ? 0 : 1) : (FY < 0.f ? 2 : 3);
+
+	// Every part on that side takes the knock; at most one comes off per crash (the weakest that has had enough).
+	FDriftLoosePart* Off = nullptr;
+	for (FDriftLoosePart& P : LooseParts)
+	{
+		if (P.bGone || P.Zone != Zone) continue;
+		P.Damage += HitSpeed;
+		if (P.Damage >= P.Strength && (!Off || P.Strength < Off->Strength)) Off = &P;
+	}
+	if (Off) KnockOff(*Off, WorldNormal * 150.f);
+
+	// The engine: worn down by knocks on its end of the car, blown by one hard one.
+	const int32 EngineZone = CarModel == 1 ? 1 : 0;
+	if (Zone == EngineZone && !bEngineBlown)
+	{
+		EngineDamage += HitSpeed;
+		if (HitSpeed >= EngineBlowHit || EngineDamage >= EngineStrength) BlowEngine();
+	}
+}
+
+void ADriftVehiclePawn::KnockOff(FDriftLoosePart& Part, const FVector& Push)
+{
+	if (Part.bGone || !Part.Mesh) return;
+	Part.bGone = true;
+	Part.bResting = false;
+	const FVector Pos = Part.Mesh->GetComponentLocation();
+	Part.Mesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+	// It leaves with the car's speed at that point, plus the shove of the crash and a bit of tumble.
+	Part.Vel = Body->GetPhysicsLinearVelocityAtPoint(Pos) * 0.7f + Push + FVector(FMath::FRandRange(-60.f, 60.f), FMath::FRandRange(-60.f, 60.f), FMath::FRandRange(180.f, 320.f));
+	Part.SpinAxis = FMath::VRand();
+	Part.SpinDegPerSec = FMath::FRandRange(180.f, 420.f);
+	if (USoundBase* Crunch = LoadObject<USoundBase>(nullptr, ExplosionSoundPath)) UGameplayStatics::PlaySound2D(this, Crunch, 0.3f, 2.2f);
+}
+
+void ADriftVehiclePawn::BlowEngine()
+{
+	if (bEngineBlown) return;
+	bEngineBlown = true;
+	FireAge = 0.f;
+	EngineDamage = EngineStrength;
+	const FVector EnginePos = GetActorTransform().TransformPosition(EngineLocalPos());
+
+	// The blast: a kick upwards under the engine, and whatever is still bolted to that end goes flying.
+	Body->AddImpulseAtLocation(GetActorUpVector() * MassKg * 220.f, EnginePos);
+	const int32 EngineZone = CarModel == 1 ? 1 : 0;
+	for (FDriftLoosePart& P : LooseParts)
+	{
+		if (!P.bGone && P.Zone == EngineZone && P.Mesh) KnockOff(P, (P.Mesh->GetComponentLocation() - EnginePos).GetSafeNormal() * 500.f + FVector(0.f, 0.f, 300.f));
+	}
+	for (int32 i = 0; i < 45; ++i)
+	{
+		EmitPuff(EnginePos + FMath::VRand() * 40.f, GetVelocity() * 0.3f + FMath::VRand() * 420.f + FVector(0.f, 0.f, 260.f), FMath::FRandRange(2.f, 3.5f), 80.f, FMath::FRandRange(350.f, 600.f));
+	}
+	FireLight->SetRelativeLocation(EngineLocalPos() + FVector(0.f, 0.f, 45.f));
+	FireLight->SetVisibility(true);
+	FireBall->SetRelativeLocation(EngineLocalPos() + FVector(0.f, 0.f, 30.f));
+	FireBall->SetVisibility(true);
+	DriftSceneryUtil::Tint(this, FireBall, FLinearColor(6.f, 1.6f, 0.15f), 1.f);
+	if (USoundBase* Boom = LoadObject<USoundBase>(nullptr, ExplosionSoundPath)) UGameplayStatics::PlaySound2D(this, Boom, 1.f, 1.f);
+	MapToastName = TEXT("ENGINE BLOWN      BACKSPACE or M: repaired car");
+	MapToastAge = 0.f;
+}
+
+void ADriftVehiclePawn::UpdateDamage(float Dt)
+{
+	HitCooldown = FMath::Max(0.f, HitCooldown - Dt);
+
+	// Parts that came off: they fly, drop, bounce and come to rest on the ground.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DriftDebris), false, this);
+	for (FDriftLoosePart& P : LooseParts)
+	{
+		if (!P.bGone || P.bResting || !P.Mesh) continue;
+		P.Vel.Z -= 980.f * Dt;
+		FVector Pos = P.Mesh->GetComponentLocation() + P.Vel * Dt;
+		FQuat Rot = FQuat(P.SpinAxis, FMath::DegreesToRadians(P.SpinDegPerSec * Dt)) * P.Mesh->GetComponentQuat();
+		FHitResult Hit;
+		if (P.Vel.Z < 0.f && GetWorld()->LineTraceSingleByChannel(Hit, Pos + FVector(0.f, 0.f, 80.f), Pos - FVector(0.f, 0.f, 12.f), ECC_Visibility, Params))
+		{
+			Pos.Z = Hit.ImpactPoint.Z + 12.f;
+			P.Vel = FVector(P.Vel.X * 0.6f, P.Vel.Y * 0.6f, -P.Vel.Z * 0.3f);
+			P.SpinDegPerSec *= 0.5f;
+			if (P.Vel.Size() < 120.f)
+			{
+				P.bResting = true;
+				Rot = FRotator(0.f, Rot.Rotator().Yaw, 0.f).Quaternion(); // lying flat
+			}
+		}
+		P.Mesh->SetWorldLocationAndRotation(Pos, Rot);
+	}
+
+	// A knocked-about engine smokes (more as it gets worse); a blown one burns.
+	const FVector EnginePos = GetActorTransform().TransformPosition(EngineLocalPos() + FVector(0.f, 0.f, 30.f));
+	const float Hurt = 1.f - GetEngineHealth();
+	const float PuffsPerSec = bEngineBlown ? 14.f : (Hurt > 0.4f ? 2.f + 8.f * (Hurt - 0.4f) / 0.6f : 0.f);
+	EngineSmokeCarry += PuffsPerSec * Dt;
+	while (EngineSmokeCarry >= 1.f)
+	{
+		EngineSmokeCarry -= 1.f;
+		EmitPuff(EnginePos + FMath::VRand() * 25.f, GetVelocity() * 0.4f + FVector(FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(120.f, 220.f)),
+			FMath::FRandRange(1.8f, 3.f), 50.f, bEngineBlown ? FMath::FRandRange(300.f, 480.f) : FMath::FRandRange(160.f, 260.f));
+	}
+	if (bEngineBlown)
+	{
+		FireAge += Dt;
+		const float Flash = 400000.f * FMath::Exp(-FireAge / 0.25f);                       // the blast
+		const float Flicker = 0.6f + 0.4f * FMath::PerlinNoise1D(FireAge * 9.f);          // the fire after it
+		FireLight->SetIntensity(Flash + 30000.f * Flicker);
+		const float Ball = 0.35f + 0.25f * Flicker + 1.6f * FMath::Exp(-FireAge / 0.2f);
+		FireBall->SetRelativeScale3D(FVector(Ball, Ball, Ball * 1.2f));
+	}
+}
+
+void ADriftVehiclePawn::RepairCar()
+{
+	for (FDriftLoosePart& P : LooseParts)
+	{
+		P.Damage = 0.f;
+		P.bResting = false;
+		if (!P.bGone || !P.Mesh || !P.HomeParent) continue;
+		P.bGone = false;
+		P.Mesh->AttachToComponent(P.HomeParent, FAttachmentTransformRules::KeepRelativeTransform);
+		P.Mesh->SetRelativeLocationAndRotation(P.Home, FRotator::ZeroRotator);
+	}
+	EngineDamage = 0.f;
+	bEngineBlown = false;
+	EngineSmokeCarry = 0.f;
+	if (FireLight) { FireLight->SetIntensity(0.f); FireLight->SetVisibility(false); }
+	if (FireBall) FireBall->SetVisibility(false);
 }
 
 void ADriftVehiclePawn::ResetCar()
@@ -1610,7 +1824,7 @@ void ADriftVehiclePawn::UpdateAudio(float Dt)
 
 	// Engine: low loop below ~3000 rpm, high loop above, each pitched from the rpm it was made at.
 	const float Fade = FMath::Clamp((RPM - 2800.f) / 900.f, 0.f, 1.f);
-	const float Load = 0.5f + 0.5f * ThrottleSmooth;
+	const float Load = bEngineBlown ? 0.f : 0.5f + 0.5f * ThrottleSmooth;
 	EngineLowAudio->SetPitchMultiplier(FMath::Clamp(RPM / 1800.f * EnginePitchScale, 0.45f, 2.4f));
 	EngineHighAudio->SetPitchMultiplier(FMath::Clamp(RPM / 5000.f * EnginePitchScale, 0.5f, 2.4f));
 	EngineLowAudio->SetVolumeMultiplier(FMath::Max(0.001f, 0.7f * (1.f - Fade) * Load * Master));
@@ -1637,6 +1851,8 @@ void ADriftVehiclePawn::TeleportCar(const FVector& Loc, const FRotator& Rot)
 	Body->SetPhysicsLinearVelocity(FVector::ZeroVector);
 	Body->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 	SetActorLocationAndRotation(Loc, Rot, false, nullptr, ETeleportType::TeleportPhysics);
+	RepairCar(); // reset, checkpoint and map change all hand you a whole car
+	HitCooldown = 0.5f;
 	for (FDriftWheel& W : Wheels) W.Omega = 0.f;
 	PrevVelocity = FVector::ZeroVector;
 	Gear = 1;
