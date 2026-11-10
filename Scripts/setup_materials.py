@@ -145,7 +145,9 @@ if not unreal.EditorAssetLibrary.does_asset_exist(PATH + "/M_Ground"):
 import os
 AUDIO = "/Game/Audio"
 AUDIO_SRC = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Scripts", "Audio")
-for wav, asset in [("engine_low", "S_EngineLow"), ("engine_high", "S_EngineHigh"), ("wind", "S_Wind"), ("tyre_squeal", "S_TyreSqueal")]:
+# The NSX has its own V6 loops (Scripts/Audio/make_v6.py).
+for wav, asset in [("engine_low", "S_EngineLow"), ("engine_high", "S_EngineHigh"), ("wind", "S_Wind"), ("tyre_squeal", "S_TyreSqueal"),
+                   ("engine_low_v6", "S_EngineLowV6"), ("engine_high_v6", "S_EngineHighV6")]:
     path = AUDIO + "/" + asset
     src = os.path.join(AUDIO_SRC, wav + ".wav")
     if unreal.EditorAssetLibrary.does_asset_exist(path) or not os.path.exists(src):
