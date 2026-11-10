@@ -1,5 +1,4 @@
 #include "DriftVehiclePawn.h"
-#include "Scoring/DriftScoreComponent.h"
 #include "Vehicle/DriftCarMesh.h"
 #include "Character/DriftDriverCharacter.h"
 #include "ProceduralMeshComponent.h"
@@ -11,6 +10,10 @@
 #include "Sound/SoundBase.h"
 #include "EngineUtils.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 
 #include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -40,6 +43,9 @@ namespace
 	// Looping sounds made by Scripts/setup_materials.py from Scripts/Audio/*.wav.
 	const TCHAR* EngineLowSoundPath = TEXT("/Game/Audio/S_EngineLow.S_EngineLow");   // recorded at 1800 rpm
 	const TCHAR* EngineHighSoundPath = TEXT("/Game/Audio/S_EngineHigh.S_EngineHigh"); // recorded at 5000 rpm
+	// The NSX's V6 loops, same rpm (Scripts/Audio/make_v6.py). Missing until setup_materials.py has run once.
+	const TCHAR* EngineLowV6SoundPath = TEXT("/Game/Audio/S_EngineLowV6.S_EngineLowV6");
+	const TCHAR* EngineHighV6SoundPath = TEXT("/Game/Audio/S_EngineHighV6.S_EngineHighV6");
 	const TCHAR* WindSoundPath = TEXT("/Game/Audio/S_Wind.S_Wind");
 	const TCHAR* TyreSoundPath = TEXT("/Game/Audio/S_TyreSqueal.S_TyreSqueal");
 	constexpr int32 CockpitCameraIndex = 1;
@@ -277,8 +283,6 @@ ADriftVehiclePawn::ADriftVehiclePawn()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm);
 	Camera->SetFieldOfView(95.f);
-
-	DriftScore = CreateDefaultSubobject<UDriftScoreComponent>(TEXT("DriftScore"));
 
 	// Tyre smoke: a pool of soft translucent spheres living in world space (they stay where they were puffed).
 	TyreSmoke = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("TyreSmoke"));
@@ -714,8 +718,29 @@ void ADriftVehiclePawn::ApplyCarSpec(int32 Model)
 	BrakeBias = C.BrakeBias;
 	MaxSteerDeg = C.Steer;
 	PaintColor = C.Paint;
-	// Same recorded loops for both cars; the V6 fires six times in two turns against four, so it sits higher.
-	EnginePitchScale = CarModel == 1 ? 1.3f : 1.f;
+	// Engine sound: the V6 has its own loops. If they aren't in the build yet, the four-cylinder loops
+	// are pitched up instead (a six fires three times a turn against two).
+	EnginePitchScale = 1.f;
+	if (EngineLowAudio && EngineHighAudio && GetWorld() && GetWorld()->IsGameWorld())
+	{
+		USoundBase* Low = CarModel == 1 ? LoadObject<USoundBase>(nullptr, EngineLowV6SoundPath) : nullptr;
+		USoundBase* High = CarModel == 1 ? LoadObject<USoundBase>(nullptr, EngineHighV6SoundPath) : nullptr;
+		if (CarModel == 1 && (!Low || !High)) EnginePitchScale = 1.3f;
+		if (!Low || !High)
+		{
+			Low = LoadObject<USoundBase>(nullptr, EngineLowSoundPath);
+			High = LoadObject<USoundBase>(nullptr, EngineHighSoundPath);
+		}
+		UAudioComponent* Comps[2] = { EngineLowAudio, EngineHighAudio };
+		USoundBase* Sounds[2] = { Low, High };
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (!Sounds[i] || Comps[i]->GetSound() == Sounds[i]) continue;
+			Comps[i]->SetSound(Sounds[i]);
+			Comps[i]->SetVolumeMultiplier(0.001f);
+			Comps[i]->Play();
+		}
+	}
 	// Tyre values everyone tunes start from the class defaults.
 	TyreGrip = Def->TyreGrip;
 	TyreGripRear = Def->TyreGripRear;
@@ -752,6 +777,45 @@ void ADriftVehiclePawn::SelectCar(int32 Model)
 	if (bOccupied && GetWorld()) TeleportCar(GetActorLocation() + FVector(0.f, 0.f, 60.f), FRotator(0.f, GetActorRotation().Yaw, 0.f));
 	MapToastName = Spec(CarModel).Name;
 	MapToastAge = 0.f;
+}
+
+void ADriftVehiclePawn::UpdateRecorder(float Dt, float Throttle, float Brake, float Steer, bool bHandbrake)
+{
+	if (!bRecordDrives || !bOccupied || !GetWorld() || !GetWorld()->IsGameWorld() || Wheels.Num() != 4) return;
+	if (RecPath.IsEmpty())
+	{
+		const FString Dir = FPaths::Combine(FPlatformProcess::UserDir(), TEXT("Tandem"), TEXT("Drives"));
+		IFileManager& FM = IFileManager::Get();
+		FM.MakeDirectory(*Dir, true);
+		// Keep the nine newest old files (names sort by time), plus this one.
+		TArray<FString> Old;
+		FM.FindFiles(Old, *FPaths::Combine(Dir, TEXT("drive_*.csv")), true, false);
+		Old.Sort();
+		for (int32 i = 0; i < Old.Num() - 9; ++i) FM.Delete(*FPaths::Combine(Dir, Old[i]));
+		RecPath = FPaths::Combine(Dir, FString::Printf(TEXT("drive_%s.csv"), *FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))));
+		RecBuffer = TEXT("t,car,area,speed_kmh,slide_deg,yaw_dps,steer_key,front_wheels_deg,throttle,brake,handbrake,gear,rpm,")
+			TEXT("g_long,g_lat,rear_wheel_kmh,rl_slip,rr_slip,fl_angle,fr_angle,rl_angle,rr_angle,fl_load,fr_load,rl_load,rr_load,x_m,y_m,z_m\n");
+	}
+	RecTime += Dt;
+	RecSampleTimer -= Dt;
+	RecFlushTimer += Dt;
+	if (RecSampleTimer <= 0.f)
+	{
+		RecSampleTimer = 0.05f;
+		const FVector Pos = GetActorLocation() * 0.01f;
+		const float RearKmh = 0.5f * (Wheels[2].Omega + Wheels[3].Omega) * WheelRadius * 0.01f * 3.6f;
+		RecBuffer += FString::Printf(TEXT("%.2f,%s,%d,%.1f,%.1f,%.1f,%.2f,%.1f,%.2f,%.2f,%d,%d,%.0f,%.2f,%.2f,%.1f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.0f,%.0f,%.0f,%.0f,%.1f,%.1f,%.1f\n"),
+			RecTime, *CarModelId(CarModel), MapIndex, GetSpeedKmh(), BodySlipDeg, Body->GetPhysicsAngularVelocityInDegrees().Z,
+			Steer, SteerAngleDeg, Throttle, Brake, bHandbrake ? 1 : 0, Gear, RPM, GLong, GLat, RearKmh,
+			Wheels[2].SlipRatio, Wheels[3].SlipRatio, Wheels[0].SlipAngleDeg, Wheels[1].SlipAngleDeg, Wheels[2].SlipAngleDeg, Wheels[3].SlipAngleDeg,
+			Wheels[0].Load, Wheels[1].Load, Wheels[2].Load, Wheels[3].Load, Pos.X, Pos.Y, Pos.Z);
+	}
+	if (RecFlushTimer >= 2.f && !RecBuffer.IsEmpty())
+	{
+		RecFlushTimer = 0.f;
+		FFileHelper::SaveStringToFile(RecBuffer, *RecPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM, &IFileManager::Get(), FILEWRITE_Append);
+		RecBuffer.Reset();
+	}
 }
 
 void ADriftVehiclePawn::UpdateCheckpoint(float Dt)
@@ -1079,6 +1143,7 @@ void ADriftVehiclePawn::Tick(float DeltaSeconds)
 	SteerAngleDeg = FMath::Clamp(SteerAngleDeg + FMath::Clamp(Want, -MaxStep, MaxStep), -MaxSteerDeg, MaxSteerDeg);
 
 	UpdateCheckpoint(DeltaSeconds);
+	UpdateRecorder(Dt, ThrottleSmooth, Brake, SteerCurrent, bHandbrake);
 
 	SimulateWheels(Dt, ThrottleSmooth, Brake, bHandbrake);
 	ClutchKickTimer = FMath::Max(0.f, ClutchKickTimer - Dt);
@@ -1467,10 +1532,6 @@ void ADriftVehiclePawn::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UP
 	FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
 	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
-	if (DriftScore && FMath::Abs(HitNormal.Z) < 0.5f && NormalImpulse.Size() > 200000.f)
-	{
-		DriftScore->BreakChain();
-	}
 }
 
 void ADriftVehiclePawn::ResetCar()
@@ -1582,5 +1643,4 @@ void ADriftVehiclePawn::TeleportCar(const FVector& Loc, const FRotator& Rot)
 	EngineOmega = IdleRPM * 2.f * PI / 60.f;
 	ClutchEngage = 1.f;
 	ShiftClutchTimer = 0.f;
-	if (DriftScore) DriftScore->BreakChain();
 }

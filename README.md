@@ -1,33 +1,49 @@
-# Drift Game
+# Tandem
 
-Lightweight Unreal Engine 5 drifting game for an M1 MacBook (8 GB). C++ gameplay, rendering set up for low-end hardware (no Lumen, Nanite, virtual shadow maps or ray tracing).
+A drift game for an M1 MacBook (8 GB), made in Unreal Engine 5.8 with C++ only. Free driving: no
+scores, laps or timers. The car is simulated with real forces (springs, a tyre model, engine, clutch,
+gearbox, diff, drag); nothing pushes it around except those.
 
-## Controls
+## Build and play
+```bash
+bash Scripts/play.sh          # build, package (Development) and play
+bash Scripts/play.sh --run    # play the last packaged build
+```
+If `--run` seems to do nothing, an old copy is stuck: `pkill -f Tandem.app; pkill -f DriftGame`.
+
+## Controls (rebind in Esc > Controls)
 | Key | Action |
 | --- | --- |
-| W / S | Throttle / brake (auto reverse when stopped) |
+| W / S | Throttle / brake |
+| Left Ctrl (hold) | Part throttle, with W |
 | A / D | Steer |
 | Space | Handbrake |
-| Q / E | Gear down / up (R and N below 1st) |
+| Q / E | Gear down / up (N and R below 1st) |
+| Left Shift | Clutch kick |
+| C | Camera |
+| G | Force overlay |
+| F | Get out / in |
+| M | Back to the last checkpoint; again: next map |
+| Backspace | Reset the car onto the road |
 | R | Wipers |
-| C | Camera, Backspace reset car, Esc pause |
+| Esc | Menu: maps, controls, car, tuning, graphics |
 
-Input actions and the mapping context are created in code (`ADriftVehiclePawn::BuildInput`), so there are no input assets to set up.
-
-## First run (about 15 minutes)
-1. Install the latest UE 5.x from the Epic Games Launcher and Xcode from the App Store. If your engine is not 5.6, right-click `DriftGame.uproject` > *Switch Unreal Engine version*.
-2. Right-click `DriftGame.uproject` > *Generate Xcode project* (or just double-click to open and build).
-3. In a separate throwaway project, create **Games > Vehicle** (C++) and **migrate** its `SportsCar` folder (skeletal mesh, physics asset, anim blueprint) into this project's `Content/Vehicles/`. The wheel bones are `PhysWheel_FL/FR/BL/BR`, which the pawn already expects.
-4. In the editor create `BP_DriftCar` as a child of `DriftVehiclePawn`. Set Mesh > Skeletal Mesh Asset and Anim Class to the SportsCar ones.
-5. Create a Blueprint child of `DriftGameModeBase` named `BP_DriftGameMode`, set *Default Pawn Class* to `BP_DriftCar`, and set it as the map's GameMode override (or Project Settings > Maps & Modes).
-6. Create `Content/Maps/L_DriftTrack` with a floor, a PlayerStart and some walls, press Play, and drive.
+## What is in it
+- Cars: Toyota AE86 drift build and Honda NSX (Esc > Car). Each keeps its own tuning (Esc > Tuning).
+- Maps: practice lot, high-speed loop, mountain pass, turn ladder, city, downhill, and three circuits
+  (Drift Park, Sweeper Ring, Snake Hill).
+- No traction control or steering assists. The one help is snap-back damping, which can be switched off
+  in Tuning.
+- Drive recorder: every drive is saved to `~/Documents/Tandem/Drives/drive_<time>.csv` (20 rows a second:
+  speed, slide angle, steering, throttle, wheel slip, ...), for tuning the handling. The ten newest are kept.
 
 ## Layout
-- `Source/DriftGame/Vehicle` car pawn, wheels
-- `Source/DriftGame/Scoring` drift detection and score
-- `Source/DriftGame/Modes` game modes (race and rally will be added here)
-- `Source/DriftGame/UI` simple canvas HUD
-- `Config` rendering, input, scalability settings
-
-## Tuning
-Open `DriftVehiclePawn.cpp` (constructor) and `DriftWheels.cpp`. Rear grip `FrictionForceMultiplier` lower than front = easier slides. Use the console command `p.Vehicle.DebugDrawing 1` to see forces.
+- `Source/DriftGame/Vehicle` the car: physics, cockpit, sound (`DriftVehiclePawn`), body meshes
+  (`DriftCarMesh`), tuning menu values (`DriftTuning`)
+- `Source/DriftGame/Track` map builders (everything is generated in code) and shared scenery
+- `Source/DriftGame/UI` HUD, pause menu, graphics settings
+- `Source/DriftGame/Input` key bindings
+- `Source/DriftGame/Modes` game mode: spawns the maps, knows starts and checkpoints
+- `Source/DriftGame/Character` the driver on foot
+- `Scripts` `play.sh`, material/sound/map setup run by it, `Audio/make_v6.py` (NSX engine sound)
+- `Docs/DriftMechanicSpec.md` how every part of the handling works and why it changed

@@ -12,7 +12,6 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
-class UDriftScoreComponent;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class UInstancedStaticMeshComponent;
@@ -161,7 +160,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Sound") TObjectPtr<UAudioComponent> TyreAudio;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<USceneComponent> WiperPivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UStaticMeshComponent> WiperBlade;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Drift") TObjectPtr<UDriftScoreComponent> DriftScore;
 	/** Tyre smoke puffs (world space, pooled). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Car") TObjectPtr<UInstancedStaticMeshComponent> TyreSmoke;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera") TObjectPtr<USpringArmComponent> SpringArm;
@@ -278,6 +276,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Brakes") float HandbrakeTorque = 1600.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drift") bool bInputLocked = false;
+	/** Writes the drive recorder files (see RecPath). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Drift") bool bRecordDrives = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Car") FLinearColor PaintColor = FLinearColor(0.82f, 0.82f, 0.8f); // white over black two-tone
 
 private:
@@ -297,6 +297,7 @@ private:
 	void OnCameraCycle();
 	void OnPause();
 	void UpdateCheckpoint(float Dt);
+	void UpdateRecorder(float Dt, float Throttle, float Brake, float Steer, bool bHandbrake);
 	void OnQuit();
 	void OnClutchKick();
 	void OnExitCar();
@@ -358,6 +359,13 @@ private:
 	bool bClutchSlipping = false;
 	int32 CarModel = 0;
 	bool bPartThrottleIn = false;
+	// Drive recorder: what the car did, 20 times a second, to ~/Documents/Tandem/Drives/drive_<time>.csv
+	// (for tuning the handling from real driving). The ten newest files are kept.
+	FString RecPath;
+	FString RecBuffer;
+	float RecTime = 0.f;
+	float RecSampleTimer = 0.f;
+	float RecFlushTimer = 0.f;
 	float ChaseSlideYaw = 0.f;       // chase camera's swing into the slide, deg
 	float EnginePitchScale = 1.f;    // more cylinders fire more often at the same rpm
 	// Snap-back damping (see bDriftAngleHold).

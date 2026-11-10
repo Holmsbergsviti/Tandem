@@ -242,3 +242,13 @@ Still reasoned values, not driven.
   separate road parts, turn per 2.7 m step under 9 deg). Sweeper Ring and Snake Hill had a 4-5 m seam step
   that made a short 9-11% bump; the seam point is removed.
 - The project is now a git repository (first commit c5078f7, work on branch drift-feel).
+
+### V6 sound, drive recorder, cleanup (10 Nov, night)
+- NSX engine sound: `Scripts/Audio/make_v6.py` synthesises two V6 loops (1800 and 5000 rpm, firing note
+  90 and 250 Hz, level matched to the four-cylinder loops); `setup_materials.py` imports them as
+  `S_EngineLowV6` / `S_EngineHighV6`. Until they are in a build the NSX uses the old loops pitched 1.3x.
+  Checked by numbers only (level, clean loop seam, spectrum), not by ear.
+- Drive recorder: `~/Documents/Tandem/Drives/drive_<time>.csv`, 20 rows a second while someone is in the
+  car (speed, slide angle, yaw rate, steering key and front wheel angle, throttle, brake, handbrake, gear,
+  rpm, g, rear wheel speed, wheel slip and loads, position). Ten newest files kept. `bRecordDrives` turns it off.
+- Removed the unused scoring component and the empty DriftWheels files; README rewritten.

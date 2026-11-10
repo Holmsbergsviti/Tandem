@@ -3,7 +3,6 @@
 #include "Track/DriftTrackBuilder.h"
 #include "EngineUtils.h"
 #include "Character/DriftDriverCharacter.h"
-#include "Scoring/DriftScoreComponent.h"
 #include "UI/DriftPlayerController.h"
 #include "UI/DriftGraphicsSettings.h"
 #include "Input/DriftKeyBindings.h"
